@@ -18,7 +18,7 @@ Notice that the data.zip file includes five datasets used in our paper: Coil, EN
 Then run the command:
 `python train.py`
 
-To switch the dataset, modify the "datasets" variable in line 1192 of train.py.
+To switch the dataset, modify the "datasets" variable in train.py.
 
 
 
