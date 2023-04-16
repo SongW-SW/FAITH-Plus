@@ -12,7 +12,7 @@ torch==1.8.1
 Run the command: 
 `unzip data.zip`
 
-Notice that the data.zip file includes five datasets used in our paper: Coil, ENZYMES, Letter_high, Reddit, and TRIANGLES. Another dataset R52 is too large to be put in the file. You can find it here 
+Notice that the data.zip file includes five datasets used in our paper: Coil, ENZYMES, Letter_high, Reddit, and TRIANGLES. Another dataset R52 is too large to be put in the file. You can find it here https://drive.google.com/file/d/1bNKPKgzlLxJb3bHQnBUCpDmy7E9Z4zvg/view?usp=share_link
 
 
 Then run the command:
