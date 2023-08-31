@@ -1,4 +1,4 @@
-# FAITH_Plus
+# FAITH+
 
 This is the code for the paper Learning Hierarchical Task Structures for Few-shot Graph Classification
 
