@@ -1124,7 +1124,7 @@ class Trainer:
 
             return loss,acc,0
 
-        elif self.baseline_mode=='WL' or self.baseline_mode!='Graphlet':
+        elif self.baseline_mode=='WL' or self.baseline_mode=='Graphlet':
             from grakel.utils import graph_from_networkx
             from grakel.kernels import WeisfeilerLehman, VertexHistogram, GraphletSampling
 
