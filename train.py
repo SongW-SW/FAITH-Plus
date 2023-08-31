@@ -21,7 +21,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn import metrics
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
-
+from grakel import GraphKernel
+from grakel import Graph as GraphKel_graph
 def EuclideanDistances(a,b):
     sq_a = a**2
     sum_sq_a = torch.sum(sq_a,dim=1).unsqueeze(1)  # m->[m, 1]
@@ -29,6 +30,7 @@ def EuclideanDistances(a,b):
     sum_sq_b = torch.sum(sq_b,dim=1).unsqueeze(0)  # n->[1, n]
     bt = b.t()
     return torch.sqrt(sum_sq_a+sum_sq_b-2*a.mm(bt))
+
 
 class MLP(nn.Module):
     def __init__(self, num_layers, input_dim, hidden_dim, output_dim):
@@ -807,19 +809,27 @@ class Model(nn.Module):
 
 
 
-    def sample_input_GNN(self, tasks):
+    def sample_input_GNN(self, tasks, return_graph=False):
         embs=[]
         final_hidds=[]
         for task in tasks:
+            support_graphs=[]
+            query_graphs=[]
             graphs=[]
-
             for i in range(len(task['support_set'])):
+                support_graphs.extend(task['support_set'][i])
+                query_graphs.extend(task['query_set'][i])
                 graphs.extend(task['support_set'][i]+task['query_set'][i])
 
             pooled_h_layers, node_embeds, Adj_block_idx, hidden_rep,final_hidd =self.gin(graphs)  #[N(K+Q), emb_size]
             embs.append(torch.cat(pooled_h_layers[1:],-1))
             final_hidds.append(final_hidd)
-        return torch.cat(embs,0), [torch.cat([one[layer] for one in final_hidds],0) for layer in range(self.gin.num_layers)] if self.args.use_select_sim else []
+            if return_graph:
+                return support_graphs, query_graphs
+
+
+        else:
+            return torch.cat(embs,0), [torch.cat([one[layer] for one in final_hidds],0) for layer in range(self.gin.num_layers)] if self.args.use_select_sim else []
 
     def construct_sample_graph(self, sample_embs, support_classes,sample_embs_selected):
 
@@ -859,16 +869,6 @@ class Model(nn.Module):
         proto_input_embs=torch.matmul(agg_matrix,sample_emb_reshape).squeeze() #[(P+1)N, sample_out_emb_size]
 
 
-        #print('adj',final_adj)
-        #print('adj_norm',(final_adj-1e9*torch.less_equal(final_adj,0.8)).softmax(-1))
-        #print('sample_in',sample_embs)
-        #print('sample_out',sample_output_embs)
-        #
-        #print('agg out',sample_output_agg[:10])
-        #print('agg sum',sample_output_agg_reshape.sum())
-        #print('proto emb',proto_input_embs)
-
-
         return sample_output_embs_query,proto_input_embs, sample_output_embs_support
 
     def construct_proto_graph(self, proto_input_embs, support_classes):
@@ -888,11 +888,6 @@ class Model(nn.Module):
         agg_matrix=proto_output_agg.reshape(((self.P+1),1,self.N)).softmax(-1) #[(P+1), 1, N]
         proto_emb_reshape=proto_output_embs.reshape(((self.P+1),self.N,-1))  #[(P+1), N, proto_out_emb_size]
         task_input_embs=torch.matmul(agg_matrix,proto_emb_reshape).squeeze() #[(P+1), proto_out_emb_size]
-
-
-        #print('proto_adj',soft_adj)
-        #print('prot adj_norm',(final_adj-1e9*torch.less_equal(final_adj,0.8)).softmax(-1))
-        #print('proto_out_emb',proto_output_embs)
 
 
         return proto_output_embs, self.dropout(task_input_embs)
@@ -940,22 +935,8 @@ class Model(nn.Module):
                     temp.append(distance)
             result=-torch.cat(temp,0)
 
-            #temp=[]
-            #sample_emb_reshape=self.classify_linear(sample_emb_reshape)
-            #for i in range(self.P+1):
-            #    proto_emb=proto_emb_reshape_[i,:,:]   #N, emb_size
-            #    sample_emb=sample_emb_reshape[i,:,:,:].reshape([self.N*self.Q,-1])
-            #    temp.append(-EuclideanDistances(sample_emb,proto_emb))
-#
-            #result=torch.cat(temp,0)
 
             return result
-
-        #print('sample_classi_emb',sample_emb)
-        #print('proto_classi_emb',proto_emb)
-        #print('task_classi_emb',task_emb)
-
-
 
         return self.dropout(result.reshape((-1,self.N)))
 
@@ -1011,15 +992,15 @@ class Trainer:
 
         train_accs=[]
         for i in range(self.epoch_num):
-            loss,acc,class_loss=self.train_one_step(mode='train',epoch=i)
+            if self.baseline_mode!='WL' and self.baseline_mode!='Graphlet':
+                loss,acc,class_loss=self.train_one_step(mode='train',epoch=i)
+                train_accs.append(np.mean(acc))
 
-            train_accs.append(np.mean(acc))
+                if loss==None:continue
 
-            if loss==None:continue
-
-            if i%50==0:
-                #self.scheduler.step()
-                print('Epoch {} Train Acc {:.4f} Loss {:.4f} Class Loss {:.4f}'.format(i,np.mean(train_accs),loss,class_loss))
+                if i%50==0:
+                    #self.scheduler.step()
+                    print('Epoch {} Train Acc {:.4f} Loss {:.4f} Class Loss {:.4f}'.format(i,np.mean(train_accs),loss,class_loss))
 
             if i%self.eval_interval==0:
                 with torch.no_grad():
@@ -1049,7 +1030,11 @@ class Trainer:
 
                     print('Mean Test Acc {:.4f}  Best Test Acc {:.4f}'.format(mean_acc,best_test_acc))
 
+                    if self.baseline_mode=='WL' or self.baseline_mode=='Graphlet':
+                        return best_test_acc
+
         return best_test_acc
+
 
 
 
@@ -1139,7 +1124,57 @@ class Trainer:
 
             return loss,acc,0
 
-        # --calculte similarities (conduct base classification)
+        elif self.baseline_mode=='WL' or self.baseline_mode!='Graphlet':
+            from grakel.utils import graph_from_networkx
+            from grakel.kernels import WeisfeilerLehman, VertexHistogram, GraphletSampling
+
+            if self.baseline_mode=='WL':
+                kernel = WeisfeilerLehman(n_iter=5, normalize=True, base_graph_kernel=VertexHistogram)
+            else:
+                kernel = GraphletSampling(normalize=True, n_jobs=5)
+
+            support_graphs, query_graphs = self.model.sample_input_GNN([current_task], return_graph=True) #[N(K+Q)]
+
+            support_graphs = [GraphKel_graph(initialization_object=nx.adj_matrix(graph.g).toarray().tolist(),
+                                    node_labels={i:i for i in range(nx.adj_matrix(graph.g).shape[0])}) for graph in support_graphs]
+
+
+            support_embs=kernel.fit_transform(support_graphs)
+            support_embs=torch.FloatTensor(support_embs).reshape([self.N_way,self.K_shot,-1]).cuda()
+
+            query_graphs = [GraphKel_graph(initialization_object=nx.adj_matrix(graph.g).toarray().tolist(),
+                                             node_labels={i:i for i in range(nx.adj_matrix(graph.g).shape[0])}) for graph in query_graphs]
+
+            query_embs=kernel.transform(query_graphs)
+            query_embs=torch.FloatTensor(query_embs).reshape([self.N_way,self.query_size,-1]).cuda()
+
+            support_protos=support_embs.mean(1)  #[N, emb_size]
+
+            scores=-EuclideanDistances(F.normalize(query_embs.reshape([self.N_way*self.query_size,-1]), -1), F.normalize(support_protos, -1))
+
+
+            labels=[]
+            for graphs in current_task['query_set']:
+                if self.args.dataset_name not in ['R52', 'Coil']:
+                    labels.append(torch.tensor(np.array([graph.label for graph in graphs])))
+                else:
+                    labels.append(torch.tensor(np.array([test_mapping[graph.label] for graph in graphs])))
+            label=torch.cat(labels,-1).cuda()
+
+            y_preds=torch.argmax(scores,dim=1)
+
+            if current_task['append_count']!=0:
+                scores=scores[:label.shape[0]-current_task['append_count'],:]
+                y_preds=y_preds[:label.shape[0]-current_task['append_count']]
+                label=label[:label.shape[0]-current_task['append_count']]
+
+
+            acc=(y_preds==label).float().cpu().numpy()
+            loss=self.criterion(scores,label)
+
+            return loss,acc,0
+
+    # --calculte similarities (conduct base classification)
         current_sample_input_embs,current_sample_input_embs_selected = self.model.sample_input_GNN([current_task]) #[N(K+Q), emb_size]
 
         classifiy_result=self.model.base_classifier(current_sample_input_embs.reshape([self.N_way,self.K_shot+self.query_size,self.model.sample_input_emb_size]).mean(1)) #[N, N]
@@ -1149,14 +1184,6 @@ class Trainer:
         class_loss=loss_type(classifiy_result,torch.tensor(first_N_class_sample).cuda())
 
 
-        if torch.isnan(class_loss).sum()>0:
-            print(current_sample_input_embs)
-            print(class_loss)
-            print(classifiy_result)
-            print(first_N_class_sample)
-            print(1/0)
-            return None,None,None
-
         if self.use_loss_based_prob and mode=='train':
             self.loss_based_prob[epoch%100,first_N_class_sample]=class_loss
             if torch.isnan(self.loss_based_prob).sum()>0:
@@ -1165,11 +1192,7 @@ class Trainer:
         sim_matrix=classifiy_result.softmax(-1)
 
 
-
-
         sample_rate=sim_matrix.sum(0).softmax(-1).cpu().detach().numpy()
-
-
 
         exclude_self=False
         if exclude_self and mode=='train':
@@ -1311,8 +1334,8 @@ def parse_arguments():
     parser.add_argument('--dataset_name', type=str, default="TRIANGLES",
                         help='name of dataset')
 
-    parser.add_argument('--baseline_mode', type=str, default=None,
-                        help='baseline')
+    parser.add_argument('--baseline_mode', type=str, default='Graphlet',
+                        help='baseline') #['proto', 'relation', 'WL', 'Graphlet']
 
     parser.add_argument('--N_way', type=int, default=3)
     parser.add_argument('--K_shot', type=int, default=10)
@@ -1347,11 +1370,10 @@ args = parse_arguments()
 
 
 
-
 seed_value_start=32
 
-#['Letter_high','ENZYMES','TRIANGLES','Reddit']:
-datasets=['Coil']
+#['Letter_high','ENZYMES','TRIANGLES','Reddit', 'Coil', 'R52']:
+datasets=['ENZYMES']
 result={dataset:defaultdict(list) for dataset in datasets}
 for dataset in datasets:
 
@@ -1359,7 +1381,7 @@ for dataset in datasets:
         args.K_shot=k
 
 
-        seed_value=seed_value_start
+        seed_value=seed_value_start+1
         import os
         os.environ['PYTHONHASHSEED']=str(seed_value)
         import random
@@ -1378,6 +1400,4 @@ for dataset in datasets:
 
         del trainer
         del test_acc
-
-        json.dump(result,open(file_name,'w'))
 
