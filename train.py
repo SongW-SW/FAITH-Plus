@@ -1152,7 +1152,6 @@ class Trainer:
 
             scores=-EuclideanDistances(F.normalize(query_embs.reshape([self.N_way*self.query_size,-1]), -1), F.normalize(support_protos, -1))
 
-
             labels=[]
             for graphs in current_task['query_set']:
                 if self.args.dataset_name not in ['R52', 'Coil']:
@@ -1182,7 +1181,6 @@ class Trainer:
         loss_type=nn.CrossEntropyLoss(reduction='none')
 
         class_loss=loss_type(classifiy_result,torch.tensor(first_N_class_sample).cuda())
-
 
         if self.use_loss_based_prob and mode=='train':
             self.loss_based_prob[epoch%100,first_N_class_sample]=class_loss
@@ -1367,21 +1365,17 @@ def parse_arguments():
 
 args = parse_arguments()
 
-
-
-
 seed_value_start=32
 
 #['Letter_high','ENZYMES','TRIANGLES','Reddit', 'Coil', 'R52']:
-datasets=['ENZYMES']
+datasets=['Coil']
 result={dataset:defaultdict(list) for dataset in datasets}
 for dataset in datasets:
 
     for k in [5]:
         args.K_shot=k
 
-
-        seed_value=seed_value_start+1
+        seed_value=seed_value_start
         import os
         os.environ['PYTHONHASHSEED']=str(seed_value)
         import random
@@ -1389,7 +1383,6 @@ for dataset in datasets:
         np.random.seed(seed_value)
         torch.manual_seed(seed_value)
         torch.cuda.manual_seed(seed_value)
-
 
 
         args.dataset_name=dataset
