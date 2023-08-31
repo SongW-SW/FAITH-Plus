@@ -21,6 +21,6 @@ Then run the command:
 ### Note:
 1. To switch the dataset, modify the "datasets" variable in train.py.
 
-2. To switch the baseline, modify the "baseline_mode" variable in train.py.
+2. To switch the baseline, modify the "baseline_mode" variable from ['proto', 'relation', 'WL', 'Graphlet'] in train.py.
 
 
