@@ -1334,7 +1334,7 @@ def parse_arguments():
     parser.add_argument('--dataset_name', type=str, default="TRIANGLES",
                         help='name of dataset')
 
-    parser.add_argument('--baseline_mode', type=str, default='Graphlet',
+    parser.add_argument('--baseline_mode', type=str, default='WL',
                         help='baseline') #['proto', 'relation', 'WL', 'Graphlet']
 
     parser.add_argument('--N_way', type=int, default=3)
