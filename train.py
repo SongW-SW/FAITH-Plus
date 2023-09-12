@@ -696,6 +696,12 @@ class Dataset:
         self.valid_tasks = defaultdict(list)
         for graph in self.validation_graphs:
             self.valid_tasks[graph.label].append(graph)
+            
+        if args.dataset_name=='R52' and args.K_shot==20:
+            for key in self.train_tasks:
+                if len(self.train_tasks[key])<30:
+                    self.train_tasks[key]=self.train_tasks[key]+self.train_tasks[key]
+
 
 
         #np.random.seed(2)
