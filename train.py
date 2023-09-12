@@ -1267,7 +1267,7 @@ class Trainer:
             N=self.N_way
             K=self.K_shot
             Q=self.query_size
-            support_features=F.normalize(sample_output_embs_support,-1).reshape([self.P_num+1,N*K,-1])[0].cpu().detach().numpy()
+            support_features=sample_output_embs_support.reshape([self.P_num+1,N*K,-1])[0].cpu().detach().numpy()
             support_labels = torch.zeros(N * K, dtype=torch.long)
             for i in range(N):
                 support_labels[i * K:(i + 1) * K] = i
@@ -1281,7 +1281,7 @@ class Trainer:
             clf.fit(support_features, support_labels.numpy())
 
             query_labels=label.cpu().detach().numpy()
-            query_features=F.normalize(sample_output_embs_query,-1).reshape([self.P_num+1,N*Q,-1])[0].cpu().detach().numpy()
+            query_features=sample_output_embs_query.reshape([self.P_num+1,N*Q,-1])[0].cpu().detach().numpy()
             query_ys_pred = clf.predict(query_features)
             acc=(query_ys_pred==query_labels)
 
