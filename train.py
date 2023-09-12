@@ -559,11 +559,6 @@ def load_data(dataset, degree_as_tag):
                 class_train.add(one)
             print(class_train)
 
-        #json.dump({'train':[3, 4, 6, 7, 8, 9, 10, 12, 15, 18, 19, 21, 22, 23, 24, 25, 26, 27],'test':[0, 1, 16, 17, 20]}, open('./split/{}/main_splits.json'.format(dataset),'w'))
-        #json.dump({'train':[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-        #                    26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49,
-        #                    50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63],'test':[80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99]}, open('./split/{}/main_splits.json'.format(dataset),'w'))
-
         g_list=[]
         for sets in [train_set, val_set, test_set]:
             graph2nodes = sets["graph2nodes"]
@@ -1041,10 +1036,6 @@ class Trainer:
 
         return best_test_acc
 
-
-
-
-
     def train_one_step(self,mode,epoch,test_idx=None, baseline_mode=None):
         if mode=='train':
             self.model.train()
@@ -1058,7 +1049,6 @@ class Trainer:
                     return None, None, None
             else:
                 p=self.N_sample_prob
-
 
 
             first_N_class_sample = np.random.choice(list(range(self.dataset.train_classes_num)), self.N_way,
@@ -1223,9 +1213,6 @@ class Trainer:
             P_tasks, support_classes = self.dataset.sample_P_tasks(self.dataset.test_tasks, self.P_num, np.ones([self.dataset.test_classes_num]) / self.dataset.test_classes_num,
                                                                    N_way=self.N_way, K_shot=self.K_shot,
                                                                    query_size=self.query_size)
-
-
-
 
 
         support_classes=[first_N_class_sample]+support_classes
