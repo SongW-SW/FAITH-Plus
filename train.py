@@ -1131,43 +1131,57 @@ class Trainer:
 
             support_graphs, query_graphs = self.model.sample_input_GNN([current_task], return_graph=True) #[N(K+Q)]
 
-            support_graphs = [GraphKel_graph(initialization_object=nx.adj_matrix(graph.g).toarray().tolist(),
-                                    node_labels={i:i for i in range(nx.adj_matrix(graph.g).shape[0])}) for graph in support_graphs]
+            supports_y = torch.tensor([graph.label for graph in support_graphs])
+            queries_y = torch.tensor([graph.label for graph in query_graphs])
 
 
-            support_embs=kernel.fit_transform(support_graphs)
-            support_embs=torch.FloatTensor(support_embs).reshape([self.N_way,self.K_shot,-1]).cuda()
 
-            query_graphs = [GraphKel_graph(initialization_object=nx.adj_matrix(graph.g).toarray().tolist(),
-                                             node_labels={i:i for i in range(nx.adj_matrix(graph.g).shape[0])}) for graph in query_graphs]
+            for graph in support_graphs:
+                #print(1)
+                num_nodes = graph.g.number_of_nodes()
 
-            query_embs=kernel.transform(query_graphs)
-            query_embs=torch.FloatTensor(query_embs).reshape([self.N_way,self.query_size,-1]).cuda()
+                node_labels = {
+                        i: graph.node_features[i].item() for i in range(num_nodes)
+                    }
 
-            support_protos=support_embs.mean(1)  #[N, emb_size]
-
-            scores=-EuclideanDistances(F.normalize(query_embs.reshape([self.N_way*self.query_size,-1]), -1), F.normalize(support_protos, -1))
-
-            labels=[]
-            for graphs in current_task['query_set']:
-                if self.args.dataset_name not in ['R52', 'Coil']:
-                    labels.append(torch.tensor(np.array([graph.label for graph in graphs])))
-                else:
-                    labels.append(torch.tensor(np.array([test_mapping[graph.label] for graph in graphs])))
-            label=torch.cat(labels,-1).cuda()
-
-            y_preds=torch.argmax(scores,dim=1)
-
-            if current_task['append_count']!=0:
-                scores=scores[:label.shape[0]-current_task['append_count'],:]
-                y_preds=y_preds[:label.shape[0]-current_task['append_count']]
-                label=label[:label.shape[0]-current_task['append_count']]
+                nx.set_node_attributes(graph.g, name="node_labels", values=node_labels)
 
 
-            acc=(y_preds==label).float().cpu().numpy()
-            loss=self.criterion(scores,label)
 
-            return loss,acc,0
+            support_grakel_graphs = from_nx(
+                [graph.g for graph in support_graphs], node_labels_tag="node_labels", as_Graph=True
+            )
+
+
+
+            for graph in query_graphs:
+                num_nodes = graph.g.number_of_nodes()
+
+                node_labels = {
+                        i: graph.node_features[i].item() for i in range(num_nodes)
+                    }
+
+                nx.set_node_attributes(graph.g, name="node_labels", values=node_labels)
+
+            query_grakel_graphs = from_nx(
+                [graph.g for graph in query_graphs], node_labels_tag="node_labels", as_Graph=True
+            )
+
+
+
+            clf = sklearn.svm.SVC(kernel="precomputed")
+
+            K_sup = kernel.fit_transform(support_grakel_graphs)
+
+            #print(supports_y)
+            clf.fit(K_sup, supports_y)
+
+            K_qu = kernel.transform(query_grakel_graphs)
+            y_preds = torch.tensor(clf.predict(K_qu))
+
+
+            acc=(y_preds==queries_y).float().cpu().numpy()
+            return 0,acc,0
 
     # --calculte similarities (conduct base classification)
         current_sample_input_embs,current_sample_input_embs_selected = self.model.sample_input_GNN([current_task]) #[N(K+Q), emb_size]
